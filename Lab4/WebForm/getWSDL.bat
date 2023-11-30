@@ -1,0 +1,1 @@
+"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\wsdl.exe" /serverInterface /n:WebServices.Example01A http://localhost:80/Simplex.asmx?wsdl

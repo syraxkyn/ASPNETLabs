@@ -1,0 +1,261 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Постраничный вывод студентов</title>
+</head>
+<body>
+    <h1>Форма создания студента</h1>
+
+    <form id="create-student-form">
+        <label for="name">Имя:</label>
+        <input type="text" id="name" name="name" required><br><br>
+
+        <label for="phone">Телефон:</label>
+        <input type="text" id="phone" name="phone" required><br><br>
+
+        <button type="submit">Создать студента</button>
+    </form>
+    <h1>Форма обновления студента</h1>
+
+    <form id="update-student-form">
+        <label for="studentId">ID студента:</label>
+        <input type="number" id="studentId" name="studentId" required><br><br>
+
+        <label for="name">Новое имя:</label>
+        <input type="text" id="upd_name" name="upd_name"><br><br>
+
+        <label for="phone">Новый телефон:</label>
+        <input type="text" id="upd_phone" name="upd_phone"><br><br>
+
+        <button type="submit">Обновить студента</button>
+    </form>
+    <h1>Список студентов</h1>
+    <form id="limit-form">
+        <label for="limit-input">Элементов на странице:</label>
+        <input type="number" id="limit-input" name="limit" min="1" value="3">
+        <button type="submit">Применить лимит</button>
+    </form>
+    <label>
+        <input type="checkbox" id="sort-name-checkbox"> Сортировать по имени
+    </label>
+    <!-- Чекбоксы для выбора полей -->
+    <form id="field-selection-form">
+        <label><input type="checkbox" name="Id"> Id</label>
+        <label><input type="checkbox" name="Name"> Имя</label>
+        <label><input type="checkbox" name="Phone"> Телефон</label>
+        <button type="submit">Применить выбор</button>
+    </form>
+
+    <div id="student-list"></div>
+    <button id="prev-button">Предыдущая страница</button>
+    <button id="next-button">Следующая страница</button>
+
+    <script>
+        // Функция для выполнения запроса к API
+        function fetchStudents(limit, offset, fields) {
+            let apiUrl = `/api/students?limit=${limit}&offset=${offset}&columns=${fields}`;
+            if (sortByName) {
+                apiUrl += '&sort=name';
+            }
+            console.log(apiUrl)
+            console.log(fields);
+            return fetch(apiUrl)
+                .then(response => response.json());
+        }
+
+
+        document.getElementById('update-student-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            // Получаем данные из формы
+            const studentId = document.getElementById('studentId').value;
+            const name = document.getElementById('upd_name').value;
+            const phone = document.getElementById('upd_phone').value;
+            console.log()
+            // Создаем объект с данными студента для обновления
+            const studentData = {
+                Name: name,
+                Phone: phone
+            };
+            console.log(studentData)
+
+            // Отправляем PUT-запрос на API
+            fetch(`https://localhost/api/students/${studentId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(studentData)
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Студент успешно обновлен');
+                        // Очищаем форму после успешного обновления студента
+                        document.getElementById('studentId').value = '';
+                        document.getElementById('name').value = '';
+                        document.getElementById('phone').value = '';
+                    } else {
+                        alert('Ошибка при обновлении студента');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Произошла ошибка при обновлении студента');
+                });
+        });
+
+        // Функция для отображения списка студентов на странице
+        function displayStudents(students) {
+            const studentListDiv = document.getElementById('student-list');
+            studentListDiv.innerHTML = '';
+
+            students.forEach(student => {
+                const studentDiv = document.createElement('div');
+                let displayText = '';
+                console.log(student)
+
+                if (fields.includes('Id')) {
+                    displayText += `Id: ${student.Value.Id}, `;
+                }
+
+                if (fields.includes('Name')) {
+                    displayText += `Имя: ${student.Value.Name}, `;
+                }
+
+                if (fields.includes('Phone')) {
+                    displayText += `Телефон: ${student.Value.Phone}, `;
+                }
+
+
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.addEventListener('click', () => {
+                    deleteStudent(student.Value.Id);
+                });
+
+
+                console.log(displayText);
+                studentDiv.textContent = displayText.slice(0, -2);
+                studentDiv.appendChild(deleteButton);
+                studentListDiv.appendChild(studentDiv);
+            });
+        }
+
+
+        function deleteStudent(studentId) {
+            const apiUrl = `https://localhost/api/students/${studentId}`;
+
+            // Выполняем DELETE-запрос
+            fetch(apiUrl, {
+                method: 'DELETE'
+            })
+                .then(response => {
+                    if (response.ok) {
+                        // Если удаление успешно, перезагружаем список студентов
+                        fetchStudents(limit, offset, fields, sortByName)
+                            .then(students => displayStudents(students));
+                    } else {
+                        console.error('Failed to delete student');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting student:', error);
+                });
+        }
+
+        let limit = 3; // Количество студентов на одной странице
+        let offset = 0; // Смещение
+        let fields = ['Id', 'Name', 'Phone']; // Выбранные поля по умолчанию
+        let sortByName = false; // Изначально сортировка по имени выключена
+
+
+        document.getElementById('field-selection-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+            const checkedCheckboxes = Array.from(this.elements)
+                .filter(input => input.type === 'checkbox' && input.checked);
+
+            if (checkedCheckboxes.length === 0) {
+                fields = ['Id', 'Name', 'Phone'];
+            } else {
+                fields = checkedCheckboxes.map(input => input.name);
+            }
+
+            fields = fields.join(',');
+
+            fetchStudents(limit, offset, fields, sortByName)
+                .then(students => displayStudents(students));
+        });
+
+        document.getElementById('sort-name-checkbox').addEventListener('change', function () {
+            sortByName = this.checked;
+            fetchStudents(limit, offset, fields, sortByName)
+                .then(students => displayStudents(students));
+        });
+
+        document.getElementById('limit-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+            limit = parseInt(document.getElementById('limit-input').value, 10);
+            offset = 0; // Сброс смещения при изменении лимита
+            fetchStudents(limit, offset, fields, sortByName)
+                .then(students => displayStudents(students));
+        });
+
+        document.getElementById('create-student-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            // Получаем данные из формы
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+
+            // Создаем объект с данными студента
+            const studentData = {
+                Name: name,
+                Phone: phone
+            };
+
+            // Отправляем POST-запрос на API
+            fetch('https://localhost/api/students', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(studentData)
+            })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Студент успешно создан');
+                        // Очищаем форму после успешного создания студента
+                        document.getElementById('name').value = '';
+                        document.getElementById('phone').value = '';
+                    } else {
+                        alert('Ошибка при создании студента');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Произошла ошибка при создании студента');
+                });
+        });
+
+        // Обработчик нажатия кнопки "Следующая страница"
+        document.getElementById('next-button').addEventListener('click', () => {
+            offset += limit;
+            fetchStudents(limit, offset, fields, sortByName)
+                .then(students => displayStudents(students));
+        });
+
+        // Обработчик нажатия кнопки "Предыдущая страница"
+        document.getElementById('prev-button').addEventListener('click', () => {
+            if (offset >= limit) {
+                offset -= limit;
+                fetchStudents(limit, offset, fields, sortByName)
+                    .then(students => displayStudents(students));
+            }
+        });
+
+        // Инициализация страницы с загрузкой первой порции студентов
+        fetchStudents(limit, offset, fields, sortByName)
+            .then(students => displayStudents(students));
+    </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Client</title>
+</head>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<body onload="getResult()">
+    <p>RESULT=<span id="result"></span></p>
+    <a href="#" onclick="POST()">POST</a>
+    <a href="#" onclick="PUT()">PUT</a>
+    <a href="#" onclick="DELETE()">DELETE</a>
+    <p>
+        <input type="number" id="valueInput" />
+    </p>
+</body>
+</html>
+<script>
+    async function getResult() {
+        try {
+            const response = await axios.get('http://127.0.0.1/bstu.saa');
+
+            const jsonData = response.data;
+		console.log(jsonData);
+            document.getElementById('result').innerText = jsonData.result;
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        }
+    }
+
+    async function POST() {
+        const value = parseInt(document.getElementById('valueInput').value);
+        try {
+            await axios.post('http://localhost:80/bstu.saa', `RESULT=${value}`);
+            getResult();
+        } catch (error) {
+            console.error("Error making POST request:", error);
+        }
+    }
+
+    async function DELETE() {
+        try {
+            await axios.delete('http://localhost:80/bstu.saa');
+            getResult();
+        } catch (error) {
+            console.error("Error making DELETE request:", error);
+        }
+    }
+
+    async function PUT() {
+        const value = parseInt(document.getElementById('valueInput').value);
+        try {
+            await axios.put('http://localhost:80/bstu.saa', `ADD=${value}`, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            getResult();
+        } catch (error) {
+            console.error("Error making PUT request:", error);
+        }
+    }
+</script>

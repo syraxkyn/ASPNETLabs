@@ -1,0 +1,645 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Постраничный вывод студентов</title>
+</head>
+<body>
+    <h1>Форма создания студента</h1>
+    <div id="postDiv"></div>
+    <h1>Список студентов</h1>
+    <form id="limit-form">
+        <label for="limit-input">Элементов на странице:</label>
+        <input type="number" id="limit-input" name="limit" min="1" value="3">
+        <button type="submit">Применить лимит</button>
+    </form>
+    <form id="filter-form">
+        <label for="minid-input">Минимальный ID:</label>
+        <input type="text" id="minid-input" name="minid">
+
+        <label for="maxid-input">Максимальный ID:</label>
+        <input type="text" id="maxid-input" name="maxid">
+
+        <label for="like-input">like:</label>
+        <input type="text" id="like-input" name="like">
+
+        <label for="globalike-input">globalike:</label>
+        <input type="text" id="globalike-input" name="globalike">
+
+        <label for="sort-select">Сортировка:</label>
+        <select id="sort-select">
+            <option value="asc">По возрастанию</option>
+            <option value="desc">По убыванию</option>
+        </select>
+
+        <button type="submit">Применить фильтры</button>
+    </form>
+    <form id="type-form">
+        <label for="type-input">Тип:</label>
+        <input type="text" id="type-input" name="type">
+        <button type="submit">Применить тип</button>
+    </form>
+    <!-- Чекбоксы для выбора полей -->
+    <form id="field-selection-form">
+        <label><input type="checkbox" name="Id"> Id</label>
+        <label><input type="checkbox" name="Name"> Имя</label>
+        <label><input type="checkbox" name="Phone"> Телефон</label>
+        <button type="submit">Применить выбор</button>
+    </form>
+
+    <div id="student-list"></div>
+    <button id="prev-button"></button>
+    <button id="next-button"></button>
+    <script src="xmlToJson.js"></script>
+    <script>
+        // Функция для выполнения запроса к API
+        function fetchStudents(limit, offset, fields, type, sort, minid, maxid,like,globalike) {
+
+            let apiUrl = `https://localhost:44336/api/students?limit=${limit}&offset=${offset}&columns=${fields}&sort=${sort ?? ''}&minid=${minid??''}&maxid=${maxid??''}&like=${like??''}&globalike=${globalike??''}`;
+
+            // Устанавливаем заголовок Accept в зависимости от выбранного формата
+            const headers = {
+                'Accept': 'application/' + type
+            };
+
+            return fetch(apiUrl, {
+                method: 'GET',
+                headers: headers
+            }).then(response => {
+                // Проверяем статус ответа
+                if (response.ok) {
+                    // Проверяем, какой формат был выбран и парсим данные соответственно
+                    if (type == 'xml') {
+                        return response.text();
+                    } else {
+                        return response.json();
+                    }
+                } else {
+                    // Выводим сообщение об ошибке
+                    alert('Ошибка запроса: ' + response.status + ' ' + response.statusText);
+                    var nextButton = document.getElementById('next-button');
+                    var prevButton = document.getElementById('prev-button');
+                    nextButton.style.display = 'none';
+                    prevButton.style.display = 'none';
+                    // Можете также выбрасывать исключение (throw) здесь, если это подходит для вашей логики
+                }
+            }).catch(error => {
+                console.error('Произошла ошибка:', error);
+            });
+        }
+
+        function displayStudents(students) {
+            const studentListDiv = document.getElementById('student-list');
+            studentListDiv.innerHTML = '';
+            if (type == 'xml') {
+                var xmlStudents = xmlToJson.parse(students);
+                console.log(xmlStudents.LinkListWrapper.Students.LinkHelperOfStudent[0])
+                var studentsXml = xmlStudents.LinkListWrapper.Students.LinkHelperOfStudent;
+                console.log(studentsXml)
+                if (Array.isArray(studentsXml)) {
+                    var StudentsArray = studentsXml;
+                    console.log('ISARRAY')
+                }
+                else {
+                    var StudentsArray = [studentsXml]
+                    console.log('NOTARRAY')
+                }
+                console.log(StudentsArray)
+                StudentsArray.forEach(student => {
+                    console.log(student)
+                    const studentDiv = document.createElement('div');
+                    let displayText = '';
+
+                    if (fields.includes('Id')) {
+                        displayText += `Id: ${student.Value.Id}, `;
+                    }
+
+                    if (fields.includes('Name')) {
+                        displayText += `Имя: ${student.Value.Name}, `;
+                    }
+
+                    if (fields.includes('Phone')) {
+                        displayText += `Телефон: ${student.Value.Phone}, `;
+                    }
+                    //delete button
+                    var deleteLink = student.Links.Link.find(link => link.Rel === "Delete student");
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = deleteLink.Rel;
+                    deleteButton.addEventListener('click', () => {
+                        const href = deleteLink.Href
+                        const apiUrl = `https://localhost:44336${href}`;
+
+                        // Выполняем DELETE-запрос
+                        fetch(apiUrl, {
+                            method: 'DELETE'
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    // Если удаление успешно, перезагружаем список студентов
+                                    fetchStudents(limit, offset, fields, type)
+                                        .then(students => displayStudents(students));
+                                } else {
+                                    alert(response.body);
+                                }
+                            })
+                            .catch(error => {
+                                alert(response.body);
+                            });
+                    });
+
+                    //update button
+                    var updateLink = student.Links.Link.find(link => link.Rel === "Update student");
+                    const updateButton = document.createElement('button');
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    const phoneInput = document.createElement('input');
+                    phoneInput.type = 'text';
+                    updateButton.textContent = updateLink.Rel
+                    updateButton.addEventListener('click', () => {
+                        const name = nameInput.value;
+                        const phone = phoneInput.value;
+                        const href = updateLink.Href;
+
+                        const apiUrl = `https://localhost:44336${href}`;
+
+                        const studentData = {
+                            Name: name,
+                            Phone: phone
+                        };
+
+                        fetch(apiUrl, {
+                            method: updateLink.Method,
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(studentData)
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    fetchStudents(limit, offset, fields, type)
+                                        .then(students => displayStudents(students));
+                                    nameInput.value = '';
+                                    phoneInput.value = '';
+                                } else {
+                                    alert(response.body);
+                                }
+                            })
+                            .catch(error => {
+                                alert(response.body);
+                            });
+                    });
+
+                    studentDiv.textContent = displayText.slice(0, -2);
+                    studentDiv.appendChild(deleteButton);
+                    studentDiv.appendChild(nameInput);
+                    studentDiv.appendChild(phoneInput);
+                    studentDiv.appendChild(updateButton);
+                    studentListDiv.appendChild(studentDiv);
+                });
+                //post form
+                var postLink = students.PostLink
+                var postDiv = document.getElementById('postDiv');
+                if (postDiv.childElementCount == 0) {
+                    var postLink = students.PostLink
+                    //FORM CREATION
+                    var form = document.createElement('form');
+                    form.method = postLink.Method;
+                    form.action = postLink.Href;
+
+                    // Создайте элементы формы, например, для ввода имени и телефона
+                    var nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.name = 'Name';
+                    var phoneInput = document.createElement('input');
+                    phoneInput.type = 'text';
+                    phoneInput.name = 'Phone';
+                    var submitButton = document.createElement('input');
+                    submitButton.type = 'submit';
+                    submitButton.value = 'Создать студента';
+
+                    // Добавьте элементы формы на форму
+                    form.appendChild(nameInput);
+                    // Добавьте элементы формы на форму
+                    form.appendChild(phoneInput);
+                    // Добавьте другие поля, если необходимо
+                    form.appendChild(submitButton);
+                    function CreateStudent() {
+                        event.preventDefault();
+
+                        // Создайте объект с данными из формы
+                        var formData = {
+                            Name: nameInput.value,
+                            Phone: phoneInput.value
+                            // Добавьте другие поля формы, если они есть
+                        };
+
+                        // Преобразуйте объект в JSON
+                        var jsonData = JSON.stringify(formData);
+
+                        // Выполните POST-запрос на сервер
+                        fetch(postLink.Href, {
+                            method: postLink.Method,
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: jsonData
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    // Перенаправляем пользователя на страницу api/students
+                                    window.location.href = '/client.html';
+                                } else {
+                                    console.error('Ошибка при создании студента');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                            });
+                    }
+                    form.onsubmit = CreateStudent
+
+                    // Добавьте форму в div
+                    postDiv.appendChild(form);
+                }
+                console.log(Array.isArray(xmlStudents.LinkListWrapper.PaginationLinks))
+                console.log(xmlStudents.LinkListWrapper.PaginationLinks.Link)
+                if (Array.isArray(xmlStudents.LinkListWrapper.PaginationLinks.Link)) {
+                    var PaginationArray = xmlStudents.LinkListWrapper.PaginationLinks.Link;
+                    console.log('ISARRAY')
+                }
+                else {
+                    var PaginationArray = [xmlStudents.LinkListWrapper.PaginationLinks.Link]
+                    console.log('NOTARRAY')
+                }
+                console.log(PaginationArray[0])
+                if (PaginationArray != null && PaginationArray[0] != undefined) {
+                    var nextLink = PaginationArray.find(link => link.Rel === "next");
+                    var prevLink = PaginationArray.find(link => link.Rel === "prev");
+                }
+                else if (PaginationArray == null) {
+                    var nextLink = undefined;
+                    var prevLink = undefined;
+                }
+                console.log(PaginationArray)
+                console.log(nextLink)
+                console.log(prevLink)
+                var nextButton = document.getElementById('next-button');
+                var prevButton = document.getElementById('prev-button');
+                if (nextLink == undefined) {
+                    nextButton.style.display = 'none';
+                }
+                else {
+                    nextButton.style.display = 'block';
+                    nextButton.textContent = nextLink.Rel
+                    function NextPage() {
+                        fetch(nextLink.Href, {
+                            method: nextLink.Method,
+                            headers: {
+                                'Accept': 'application/xml'
+                            },
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    return response.text();
+                                } else {
+                                    throw new Error('Ошибка при выполнении запроса');
+                                }
+                            })
+                            .then(students => {
+                                // Обновляем список студентов после успешного запроса
+                                displayStudents(students);
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                            });
+                        this.removeEventListener('click', NextPage)
+                    }
+                    nextButton.onclick = NextPage
+                }
+                if (prevLink == undefined) {
+                    prevButton.style.display = 'none';
+                }
+                else {
+                    prevButton.style.display = 'block';
+                    prevButton.textContent = prevLink.Rel
+                    function prevPage() {
+                        fetch(prevLink.Href, {
+                            method: prevLink.Method,
+                            headers: {
+                                'Accept': 'application/xml'
+                            },
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    return response.text();
+                                } else {
+                                    throw new Error('Ошибка при выполнении запроса');
+                                }
+                            })
+                            .then(students => {
+                                displayStudents(students);
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                            });
+                    }
+                    prevButton.onclick = prevPage;
+                }
+            }
+            if (type == 'json') {
+                const studentList = students.Students;
+
+                studentList.forEach(student => {
+                    const studentDiv = document.createElement('div');
+                    let displayText = '';
+
+                    if (fields.includes('Id')) {
+                        displayText += `Id: ${student.Value.Id}, `;
+                    }
+
+                    if (fields.includes('Name')) {
+                        displayText += `Имя: ${student.Value.Name}, `;
+                    }
+
+                    if (fields.includes('Phone')) {
+                        displayText += `Телефон: ${student.Value.Phone}, `;
+                    }
+                    //delete button
+                    var deleteLink = student.Links.find(link => link.Rel === "Delete student");
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = deleteLink.Rel;
+                    deleteButton.addEventListener('click', () => {
+                        const href = deleteLink.Href
+                        const apiUrl = `https://localhost:44336${href}`;
+
+                        // Выполняем DELETE-запрос
+                        fetch(apiUrl, {
+                            method: 'DELETE'
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    // Если удаление успешно, перезагружаем список студентов
+                                    fetchStudents(limit, offset, fields, type)
+                                        .then(students => displayStudents(students));
+                                } else {
+                                    alert(response.body);
+                                }
+                            })
+                            .catch(error => {
+                                alert(response.body);
+                            });
+                    });
+
+                    //update button
+                    var updateLink = student.Links.find(link => link.Rel === "Update student");
+                    const updateButton = document.createElement('button');
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    const phoneInput = document.createElement('input');
+                    phoneInput.type = 'text';
+                    updateButton.textContent = updateLink.Rel
+                    updateButton.addEventListener('click', () => {
+                        const name = nameInput.value;
+                        const phone = phoneInput.value;
+                        const href = student.Links.find(link => link.Rel === 'Update student').Href;
+
+                        const apiUrl = `https://localhost:44336${href}`;
+
+                        const studentData = {
+                            Name: name,
+                            Phone: phone
+                        };
+
+                        fetch(apiUrl, {
+                            method: updateLink.Method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(studentData)
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    fetchStudents(limit, offset, fields, type)
+                                        .then(students => displayStudents(students));
+                                    nameInput.value = '';
+                                    phoneInput.value = '';
+                                } else {
+                                    alert(response.body);
+                                }
+                            })
+                            .catch(error => {
+                                alert(response.body);
+                            });
+                    });
+
+                    studentDiv.textContent = displayText.slice(0, -2);
+                    studentDiv.appendChild(deleteButton);
+                    studentDiv.appendChild(nameInput);
+                    studentDiv.appendChild(phoneInput);
+                    studentDiv.appendChild(updateButton);
+                    studentListDiv.appendChild(studentDiv);
+                });
+                //post form
+                var postLink = students.PostLink
+                var postDiv = document.getElementById('postDiv');
+                if (postDiv.childElementCount == 0) {
+                    var postLink = students.PostLink
+                    //FORM CREATION
+                    var form = document.createElement('form');
+                    form.method = postLink.Method;
+                    form.action = postLink.Href;
+
+                    // Создайте элементы формы, например, для ввода имени и телефона
+                    var nameInput = document.createElement('input');
+                    nameInput.type = 'text';
+                    nameInput.name = 'Name';
+                    var phoneInput = document.createElement('input');
+                    phoneInput.type = 'text';
+                    phoneInput.name = 'Phone';
+                    var submitButton = document.createElement('input');
+                    submitButton.type = 'submit';
+                    submitButton.value = 'Создать студента';
+
+                    // Добавьте элементы формы на форму
+                    form.appendChild(nameInput);
+                    // Добавьте элементы формы на форму
+                    form.appendChild(phoneInput);
+                    // Добавьте другие поля, если необходимо
+                    form.appendChild(submitButton);
+                    function CreateStudent() {
+                        event.preventDefault();
+
+                        // Создайте объект с данными из формы
+                        var formData = {
+                            Name: nameInput.value,
+                            Phone: phoneInput.value
+                            // Добавьте другие поля формы, если они есть
+                        };
+
+                        // Преобразуйте объект в JSON
+                        var jsonData = JSON.stringify(formData);
+
+                        // Выполните POST-запрос на сервер
+                        fetch(postLink.Href, {
+                            method: postLink.Method,
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: jsonData
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    // Перенаправляем пользователя на страницу api/students
+                                    window.location.href = '/client.html';
+                                } else {
+                                    console.error('Ошибка при создании студента');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                            });
+                    }
+                    form.onsubmit = CreateStudent
+
+                    // Добавьте форму в div
+                    postDiv.appendChild(form);
+                }
+                var nextLink = students.PaginationLinks.find(link => link.Rel === "next");
+                var prevLink = students.PaginationLinks.find(link => link.Rel === "prev");
+                var nextButton = document.getElementById('next-button');
+                var prevButton = document.getElementById('prev-button');
+                if (nextLink == undefined) {
+                    nextButton.style.display = 'none';
+                }
+                else {
+                    nextButton.style.display = 'block';
+                    nextButton.textContent = nextLink.Rel
+                    function NextPage() {
+                        fetch(nextLink.Href, {
+                            method: nextLink.Method,
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    return response.json();
+                                } else {
+                                    throw new Error('Ошибка при выполнении запроса');
+                                }
+                            })
+                            .then(students => {
+                                // Обновляем список студентов после успешного запроса
+                                displayStudents(students);
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                            });
+                        this.removeEventListener('click', NextPage)
+                    }
+                    nextButton.onclick = NextPage
+                }
+                if (prevLink == undefined) {
+                    prevButton.style.display = 'none';
+                }
+                else {
+                    prevButton.style.display = 'block';
+                    prevButton.textContent = prevLink.Rel
+                    function prevPage() {
+                        fetch(prevLink.Href, {
+                            method: prevLink.Method,
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    return response.json();
+                                } else {
+                                    throw new Error('Ошибка при выполнении запроса');
+                                }
+                            })
+                            .then(students => {
+                                displayStudents(students);
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                            });
+                    }
+                    prevButton.onclick = prevPage;
+                }
+            }
+        }
+
+        let limit = 3; // Количество студентов на одной странице
+        let type = 'json'
+        let offset = 0; // Смещение
+        let fields = ['Id', 'Name', 'Phone']; // Выбранные поля по умолчанию
+        let sort = 'asc'; // Изначально сортировка по имени выключена
+        let like = null;
+        let globalike = null;
+        let minid = 0;
+        let maxid = 10000;
+
+        document.getElementById('field-selection-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+            const checkedCheckboxes = Array.from(this.elements)
+                .filter(input => input.type === 'checkbox' && input.checked);
+
+            if (checkedCheckboxes.length === 0) {
+                fields = ['Id', 'Name', 'Phone'];
+            } else {
+                fields = checkedCheckboxes.map(input => input.name);
+            }
+
+            fields = fields.join(',');
+
+            fetchStudents(limit, offset, fields, type)
+                .then(students => displayStudents(students));
+        });
+
+        document.getElementById('filter-form').addEventListener('submit', function (event) {
+            event.preventDefault(); // Предотвращаем отправку формы, чтобы не обновлять страницу
+
+            // Получаем выбранное значение сортировки
+            const sortSelect = document.getElementById('sort-select');
+            sort = sortSelect.value;
+            const minidInput = document.getElementById('minid-input');
+            const maxidInput = document.getElementById('maxid-input');
+            const likeInput = document.getElementById('like-input');
+            const globalikeInput = document.getElementById('globalike-input');
+
+            like = likeInput.value;
+            globalike = globalikeInput.value;
+            minid = minidInput.value;
+            maxid = maxidInput.value;
+
+            // Вызываем функцию fetchStudents с параметрами limit, offset, fields и sort
+            fetchStudents(limit, offset, fields, type, sort, minid, maxid,like,globalike)
+                .then(students => displayStudents(students));
+
+            // Другие действия, которые вы можете выполнить после отправки формы
+        });
+
+        document.getElementById('limit-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+            limit = parseInt(document.getElementById('limit-input').value, 10);
+            offset = 0; // Сброс смещения при изменении лимита
+            fetchStudents(limit, offset, fields, type)
+                .then(students => displayStudents(students));
+        });
+
+        document.getElementById('type-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+            type = document.getElementById('type-input').value;
+            fetchStudents(limit, offset, fields, type)
+                .then(students => displayStudents(students));
+        });
+
+        // Инициализация страницы с загрузкой первой порции студентов
+        fetchStudents(limit, offset, fields, type)
+            .then(students => displayStudents(students));
+    </script>
+</body>
+</html>
